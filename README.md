@@ -24,3 +24,10 @@ After that run below command.
     [dev] 
     aws_access_key_id = 
     aws_secret_access_key = 
+
+## Prerequisites
+
+- Python  2.7
+- boto3  1.7.29 (or later)
+- requests  2.18.4 (or later)
+
