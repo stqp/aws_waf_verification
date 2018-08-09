@@ -222,7 +222,6 @@ for acl in acl_list:
 
 
   # 検査実行
-  input_name_list = ['./in_data/cp_abnormal_burpscan.data'] #TODO
   do_test(input_name_list, out_data)
   print("end : " + acl['Name'])
 
