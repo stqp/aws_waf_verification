@@ -22,10 +22,10 @@ from urlparse import urlparse
 cf_id = ""
 
 # You must specify cloudfront hostname.
-TARGET_HOST = "localhost"
+TARGET_HOST = ""
 
 # You must specify cloudfront port.
-TARGET_PORT = 9981
+TARGET_PORT = 
 
 
 PROTO = 'http'
@@ -194,16 +194,10 @@ for file_name in os.listdir(input_data_folder):
 acl_list = waf.list_web_acls()['WebACLs']
 acl_list = sorted(acl_list, key=lambda x:x['Name'])
 
-#TODO
-acl_list = [
-  {u'WebACLId': u'582097b3-1e39-4e05-b00d-a39661709b90', u'Name': u'stqp1'},
-  {u'WebACLId': u'582097b3-1e39-4e05-b00d-a39661709b90', u'Name': u'stqp2'},
-  ]
 
 for acl in acl_list:
 
   # Web ACLを１個ずつ切替えながら検査していく。
-  """ TODO
   new_cf_conf = copy.deepcopy(cf_conf)
   new_cf_conf['WebACLId'] = acl['WebACLId']
 
@@ -216,10 +210,9 @@ for acl in acl_list:
     Id=cf_id,
     IfMatch=cf_etag
   )
-  """
 
   #浸透するのを念のためまつ
-  #TODO sleep(10)
+  sleep(10)
   
 
   # 結果の出力先をクリーンして(後に)新規作成。
@@ -256,6 +249,7 @@ with open(get_out_file_path(acl_list[0]['Name'])) as input_file:
       del tmp[len(tmp)-2]
       out_file.write(','.join(tmp))
 
+
 # 前の処理で作ったアウトプットファイルの枠に、中身を突っ込んでいく。
 for acl in acl_list:
 
@@ -269,7 +263,6 @@ for acl in acl_list:
   in_lines2 = []
   with open(get_out_file_path(acl['Name'])) as file:
     in_lines2 = file.readlines()
-
 
   with open(out_file_path,'w') as out_file:
     for i in range(-1,len(in_lines2)):
