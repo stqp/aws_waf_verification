@@ -22,15 +22,15 @@ from urlparse import urlparse
 cf_id = ""
 
 # You must specify cloudfront hostname.
-TARGET_HOST = ""
+TARGET_HOST = "localhost"
+
+# You must specify cloudfront port.
+TARGET_PORT = 9981
 
 
-
-TARGET_PORT = 80
-PROTO = 'https'
+PROTO = 'http'
 input_data_folder = './in_data'
 thread_num = 10
-
 session = boto3.Session(profile_name="dev")
 waf = session.client('waf') # waf = session.client('waf-regional')
 cf = session.client('cloudfront')
@@ -82,7 +82,7 @@ def do_request(req_sequence, req_raw_list, test_data_file_name):
     print(req_sequence)
 
   request = ""
-  req_raw_list = map(lambda x: x.replace('localhost:8080', HOST), req_raw_list)
+  req_raw_list = map(lambda x: x.replace('localhost:8080', TARGET_HOST), req_raw_list)
 
   # リクエストの中身を文字列化する。var_formatsはバイト文字列でバグるので無視する
   if test_data_file_name.find('var_formats')<0:
@@ -94,13 +94,12 @@ def do_request(req_sequence, req_raw_list, test_data_file_name):
   url = res[1]
 
 
-  # httpだとローカル端末のウイルス検知ソフトが勝手に通信遮断するので、httpsにする。
-  url = url.replace('http://', 'https://')
+  url = url.replace('http://', PROTO+'//')
 
   # hack code. To skip unknown hostname(=cant resolve hostname).
   try :
     url_parsed = urlparse(url)
-    if url_parsed.hostname != HOST:
+    if url_parsed.hostname != TARGET_HOST:
       return host_cant_resolve(method, req_sequence, request, test_data_file_name)
   except Exception as e:
     print(e)
@@ -114,7 +113,7 @@ def do_request(req_sequence, req_raw_list, test_data_file_name):
       if not header:
         break;
 
-      header = header.replace('localhost:8080', HOST)
+      header = header.replace('localhost:8080', TARGET_HOST)
       header = header.replace(' ','')
       tmp_headers = header.split(':')
       key = tmp_headers.pop(0)
@@ -136,12 +135,12 @@ def do_request(req_sequence, req_raw_list, test_data_file_name):
 
 
 
-def do_test(input_list, out_data):
+def do_test(input_name_list, out_data):
   req_sequence = 1
   req_list = []
-  input_list = sorted(input_list)
+  input_name_list = sorted(input_name_list)
 
-  for input_file_path in input_list:
+  for input_file_path in input_name_list:
 
     # Mac環境においては、憎き「.DS_Store」ファイルが勝手に作られるので無視する。
     if input_file_path.find('DS_Store')>=0:
@@ -154,7 +153,7 @@ def do_test(input_list, out_data):
 
       for line in lines:
         if len(req_raw_list)>0 and ('GET' in line or 'POST' in line) :
-          req_list.append((req_sequence,req_raw_list, input_file))
+          req_list.append((req_sequence,req_raw_list, input_file_path))
           req_raw_list = []
           req_raw_list.append(line)
           req_sequence = req_sequence + 1
@@ -163,7 +162,7 @@ def do_test(input_list, out_data):
         req_raw_list.append(line)
 
       #最後のリクエストがループ内では処理されないので、ここで再度処理する。
-      req_list.append( (req_sequence, req_raw_list, input_file) )
+      req_list.append( (req_sequence, req_raw_list, input_file_path) )
       req_sequence = req_sequence + 1
 
 
@@ -185,20 +184,26 @@ def do_test(input_list, out_data):
 #### メイン処理の開始地点 ####
 
 # search input files.
-input_list = []
+input_name_list = []
 for file_name in os.listdir(input_data_folder):
   file_path = os.path.join(input_data_folder, file_name)
   if os.path.isfile(file_path):
-    input_list.append(file_path)
+    input_name_list.append(file_path)
 
 
 acl_list = waf.list_web_acls()['WebACLs']
 acl_list = sorted(acl_list, key=lambda x:x['Name'])
 
+#TODO
+acl_list = [
+  {u'WebACLId': u'582097b3-1e39-4e05-b00d-a39661709b90', u'Name': u'stqp1'},
+  {u'WebACLId': u'582097b3-1e39-4e05-b00d-a39661709b90', u'Name': u'stqp2'},
+  ]
 
 for acl in acl_list:
 
   # Web ACLを１個ずつ切替えながら検査していく。
+  """ TODO
   new_cf_conf = copy.deepcopy(cf_conf)
   new_cf_conf['WebACLId'] = acl['WebACLId']
 
@@ -211,10 +216,10 @@ for acl in acl_list:
     Id=cf_id,
     IfMatch=cf_etag
   )
-
+  """
 
   #浸透するのを念のためまつ
-  sleep(10)
+  #TODO sleep(10)
   
 
   # 結果の出力先をクリーンして(後に)新規作成。
@@ -224,17 +229,18 @@ for acl in acl_list:
 
 
   # 検査実行
-  do_test(input_list, out_data)
+  input_name_list = ['./in_data/cp_abnormal_burpscan.data'] #TODO
+  do_test(input_name_list, out_data)
   print("end : " + acl['Name'])
 
 
 
 #### 出力結果を１つのファイルにまとめる ####
 
+out_file_path = get_out_file_path('all')
+
 # ここではアウトプットファイルの枠だけ作成する。
 with open(get_out_file_path(acl_list[0]['Name'])) as input_file:
-
-  out_file_path = get_out_file_path('all')
 
   # 結果の出力先をクリーンして新規作成
   if os.path.isfile(out_file_path):
@@ -245,11 +251,10 @@ with open(get_out_file_path(acl_list[0]['Name'])) as input_file:
     # write headers.
     out_file.write('No.,method,request,data\n')
 
-    for line in in_file.readlines():
+    for line in input_file.readlines():
       tmp = line.split(',')
       del tmp[len(tmp)-2]
       out_file.write(','.join(tmp))
-
 
 # 前の処理で作ったアウトプットファイルの枠に、中身を突っ込んでいく。
 for acl in acl_list:
@@ -258,16 +263,15 @@ for acl in acl_list:
   print acl['Name']
 
   in_lines1 = []
-  with open(out_data) as file:
+  with open(out_file_path) as file:
     in_lines1 = file.readlines()
-
 
   in_lines2 = []
   with open(get_out_file_path(acl['Name'])) as file:
     in_lines2 = file.readlines()
 
 
-  with open(out_data,'w') as out_file:
+  with open(out_file_path,'w') as out_file:
     for i in range(-1,len(in_lines2)):
       line1 = in_lines1[i+1]
       if i == -1:
